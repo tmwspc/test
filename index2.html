@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AR viewer</title>
+    <!-- Import the component -->
+    <script
+      type="module"
+      src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
+    ></script>
+    <script
+      nomodule
+      src="https://unpkg.com/@google/model-viewer/dist/model-viewer-legacy.js"
+    ></script>
+  </head>
+  <body>
+    <model-viewer
+      src="./src/archive/gll3.glb"
+      ios-src="./src/archive/gll3.usdz"
+      alt="A 3D model"
+      auto-rotate
+      ar-modes="scene-viewer webxr quick-look" 
+      camera-controls
+      disable-download
+      ar
+    ></model-viewer>
+  </body>
+</html>
