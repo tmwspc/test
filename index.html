@@ -14,8 +14,18 @@
       src="https://unpkg.com/@google/model-viewer/dist/model-viewer-legacy.js"
     ></script>
   </head>
+  <script>
+    const viewer =document.getElementById('viewer');
+
+    viewer.addEventListener('ar-status' , (event)=>{
+      if(event.detail.status === 'session-started'){
+        viewer.orientation ='0deg -180deg 0deg';
+      }
+    });
+  </script>
   <body>
     <model-viewer
+      id="viewer"
       src="./src/archive/gll3.glb"
       ios-src="./src/archive/gll3.usdz"
       alt="A 3D model"
