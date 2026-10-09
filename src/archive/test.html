@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>GOSAT-GW 簡易AR試作</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:sans-serif}
+#video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+#scene{position:fixed;inset:0;z-index:1;touch-action:none}
+#ui{position:fixed;left:0;right:0;top:0;z-index:3;padding:12px;color:#fff;text-shadow:0 1px 3px #000;background:linear-gradient(#0008,transparent)}
+button{font-size:16px;padding:9px 13px;border:0;border-radius:8px;margin:3px}
+#hint{font-size:13px;margin-top:5px}
+#msg{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:4;color:#fff;background:#000a;padding:10px 14px;border-radius:10px;text-align:center}
+</style>
+</head>
+<body>
+<video id="video" autoplay playsinline muted></video>
+<div id="scene"></div>
+<div id="ui">
+  <b>GOSAT-GW 簡易AR試作</b><br>
+  <button id="start">カメラを起動</button>
+  <button id="reset">衛星を中央へ</button>
+  <div id="hint">衛星は指1本で移動、2本指で拡大・縮小。端末の向きによる自動追従は対応機種でのみ有効です。</div>
+</div>
+<div id="msg">「カメラを起動」を押してください</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+
+const video=document.getElementById('video');
+const msg=document.getElementById('msg');
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,.01,100);
+camera.position.set(0,0,5);
+const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.setClearColor(0x000000,0);
+document.getElementById('scene').appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff,2.2));
+const dl=new THREE.DirectionalLight(0xffffff,2.5); dl.position.set(3,5,6); scene.add(dl);
+
+const sat=new THREE.Group(); scene.add(sat);
+
+// Stylized GOSAT-GW body
+const body=new THREE.Mesh(
+  new THREE.BoxGeometry(1.8,.85,.95),
+  new THREE.MeshStandardMaterial({color:0xd9d9d0,metalness:.25,roughness:.65})
+);
+sat.add(body);
+
+// Gold instrument box
+const inst=new THREE.Mesh(
+  new THREE.BoxGeometry(.62,.58,.72),
+  new THREE.MeshStandardMaterial({color:0xc9a64b,metalness:.35,roughness:.5})
+);
+inst.position.set(0,-.18,.0); sat.add(inst);
+
+// Solar panels
+const panelMat=new THREE.MeshStandardMaterial({color:0x153b73,metalness:.15,roughness:.5});
+for(const x of [-1.55,1.55]){
+  const p=new THREE.Mesh(new THREE.BoxGeometry(1.15,.045,.72),panelMat);
+  p.position.x=x; sat.add(p);
+  for(let i=0;i<5;i++){
+    const line=new THREE.Mesh(new THREE.BoxGeometry(.018,.055,.70),new THREE.MeshBasicMaterial({color:0xbfc8d8}));
+    line.position.set(x-0.46+i*.23,.03,0); sat.add(line);
+  }
+}
+
+// AMSR3 dish
+const dish=new THREE.Mesh(
+  new THREE.CylinderGeometry(.52,.18,.12,48),
+  new THREE.MeshStandardMaterial({color:0xeeeeea,metalness:.1,roughness:.7})
+);
+dish.rotation.x=Math.PI/2; dish.position.set(.18,.55,0); sat.add(dish);
+const mast=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.55,16),new THREE.MeshStandardMaterial({color:0x777777}));
+mast.position.set(.18,.82,0); sat.add(mast);
+
+sat.position.set(0,0,0);
+sat.rotation.set(-.15,.35,.08);
+
+let scale=1;
+let dragging=false,lastX=0,lastY=0,startDist=0,startScale=1;
+renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
+renderer.domElement.addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-lastX,dy=e.clientY-lastY;
+  sat.position.x+=dx/innerWidth*3.0;
+  sat.position.y-=dy/innerHeight*3.0;
+  lastX=e.clientX;lastY=e.clientY;
+});
+renderer.domElement.addEventListener('pointerup',()=>dragging=false);
+renderer.domElement.addEventListener('pointercancel',()=>dragging=false);
+renderer.domElement.addEventListener('wheel',e=>{
+  scale=Math.max(.35,Math.min(3.5,scale*(e.deltaY<0?1.08:.93))); sat.scale.setScalar(scale);
+},{passive:true});
+
+function dist(a,b){return Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)}
+renderer.domElement.addEventListener('touchstart',e=>{
+  if(e.touches.length===2){startDist=dist(e.touches[0],e.touches[1]);startScale=scale;}
+},{passive:true});
+renderer.domElement.addEventListener('touchmove',e=>{
+  if(e.touches.length===2){
+    e.preventDefault();
+    scale=Math.max(.35,Math.min(3.5,startScale*dist(e.touches[0],e.touches[1])/startDist));
+    sat.scale.setScalar(scale);
+  }
+},{passive:false});
+
+document.getElementById('reset').onclick=()=>{
+  sat.position.set(0,0,0);sat.rotation.set(-.15,.35,.08);scale=1;sat.scale.setScalar(1);
+};
+
+document.getElementById('start').onclick=async()=>{
+  try{
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('カメラ機能が利用できません');
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    video.srcObject=stream;
+    msg.textContent='カメラAR試作：衛星を指で動かせます';
+    setTimeout(()=>msg.style.display='none',2200);
+  }catch(e){
+    msg.textContent='カメラを起動できません。Chromeのカメラ許可とHTTPS接続を確認してください。';
+  }
+};
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+function animate(){
+  requestAnimationFrame(animate);
+  sat.rotation.y += .002;
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
