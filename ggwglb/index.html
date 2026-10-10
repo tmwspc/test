@@ -15,8 +15,9 @@ button{border:0;border-radius:999px;padding:12px 15px;font-size:15px;font-weight
 <div id="top"><h1>GOSAT-GW ARカメラ（GLB版）</h1><p>カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。</p><p>モデル読込に失敗した場合は、index.html と ggw.glb が同じフォルダにあるか確認してください。</p></div>
 <div id="status">「カメラ開始」を押してください</div><div id="saved"></div>
 <div id="controls"><button id="start">カメラ開始</button><button id="reset">中央へ</button><button class="primary" id="capture" disabled>● 撮影・保存</button></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
 <script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
 const video=document.querySelector('#video'),host=document.querySelector('#gl'),status=document.querySelector('#status');
 const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});
@@ -36,7 +37,7 @@ new GLTFLoader().load('./ggw.glb',gltf=>{
  status.textContent='GOSAT-GWの3Dモデルを読み込みました。カメラ開始を押してください。';
 },undefined,error=>{
  console.error(error);status.style.display='block';
- status.textContent='3Dモデルを読み込めません。index.html と ggw.glb を同じフォルダに置いてください。';
+ status.textContent='3Dモデルを読み込めません。HTTPSで開いているか、通信を許可しているか、index.html と ggw.glb が同じフォルダか確認してください。';
 });
 sat.rotation.set(-.18,.38,.08);let scale=1,pointers=new Map(),pinchDist=0,pinchScale=1,dragX=0,dragY=0;const canvas=renderer.domElement;
 canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){dragX=e.clientX;dragY=e.clientY}if(pointers.size===2){const a=[...pointers.values()];pinchDist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchScale=scale}});
