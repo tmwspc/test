@@ -25,25 +25,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWi
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);camera.position.set(0,0,7);
 scene.add(new THREE.AmbientLight(0xffffff,2.1));const light=new THREE.DirectionalLight(0xffffff,2.3);light.position.set(3,4,6);scene.add(light);
 const sat=new THREE.Group();scene.add(sat);let modelLoaded=false;
- // Diagnose mobile WebGL rendering independently of the GLB model.
- const diagCube=new THREE.Mesh(
-   new THREE.BoxGeometry(0.8,0.8,0.8),
-   new THREE.MeshNormalMaterial({wireframe:false})
- );
- diagCube.position.set(0,0,0);
- diagCube.visible=true;
- scene.add(diagCube);
- let showDiagCube=true;
- const diagLabel=document.createElement('div');
- diagLabel.id='diagLabel';
- diagLabel.textContent='診断用の立方体：表示ON';
- diagLabel.style.cssText='position:fixed;left:10px;top:58px;z-index:20;background:rgba(0,0,0,.72);color:#fff;padding:7px 10px;border-radius:8px;font:14px sans-serif;';
- document.body.appendChild(diagLabel);
- const diagToggle=document.createElement('button');
- diagToggle.textContent='立方体 ON/OFF';
- diagToggle.style.cssText='position:fixed;left:10px;top:100px;z-index:20;padding:9px 12px;border:0;border-radius:9px;background:#fff;color:#111;font:14px sans-serif;';
- document.body.appendChild(diagToggle);
- diagToggle.onclick=()=>{showDiagCube=!showDiagCube;diagCube.visible=showDiagCube;diagLabel.textContent='診断用の立方体：表示'+(showDiagCube?'ON':'OFF');};
+
 new GLTFLoader().load('./ggw.glb',gltf=>{
  const model=gltf.scene;
  // GLBの元座標で外接箱を計算し、縮小後の中心が原点に来るよう補正
@@ -85,5 +67,5 @@ document.querySelector('#capture').onclick=()=>{if(!video.videoWidth){status.sty
 const w=video.videoWidth,h=video.videoHeight;photo.width=w;photo.height=h;ctx.drawImage(video,0,0,w,h);ctx.drawImage(renderer.domElement,0,0,w,h);
 photo.toBlob(blob=>{if(!blob){status.textContent='写真を作成できませんでした。';return}const url=URL.createObjectURL(blob),a=document.createElement('a'),stamp=new Date().toISOString().replace(/[:.]/g,'-');a.href=url;a.download='GOSAT-GW-AR-'+stamp+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);document.querySelector('#saved').textContent='保存を開始しました。通知または「ダウンロード」フォルダを確認してください。';setTimeout(()=>document.querySelector('#saved').textContent='',5000)},'image/png')};
 addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()});
-function animate(){requestAnimationFrame(animate);diagCube.rotation.x+=0.008;diagCube.rotation.y+=0.012;renderer.render(scene,camera)}animate();
+function animate(){requestAnimationFrame(animate);renderer.render(scene,camera)}animate();
 </script></body></html>
