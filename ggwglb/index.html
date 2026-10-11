@@ -25,7 +25,7 @@ button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight
  <button id="tiltUp" aria-label="上向き">↑ 傾き</button>
  <button id="tiltDown" aria-label="下向き">↓ 傾き</button>
 </div>
-<div id="controls"><button id="start">カメラ開始</button><button id="reset">初期位置</button><button class="primary" id="capture" disabled>● 撮影・保存</button></div>
+<div id="controls"><button id="start">カメラ開始</button><button id="animToggle">アンテナ一時停止</button><button id="reset">初期位置</button><button class="primary" id="capture" disabled>● 撮影・保存</button></div>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
 <script type="module">
 import * as THREE from 'three';
@@ -36,6 +36,9 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWi
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);camera.position.set(0,0,7);
 scene.add(new THREE.AmbientLight(0xffffff,2.1));const light=new THREE.DirectionalLight(0xffffff,2.3);light.position.set(3,4,6);scene.add(light);
 const sat=new THREE.Group();scene.add(sat);let modelLoaded=false;
+let mixer=null, antennaAction=null, animationPlaying=true;
+const clock=new THREE.Clock();
+const animButton=document.querySelector('#animToggle');
 
 new GLTFLoader().load('./ggw.glb',gltf=>{
  const model=gltf.scene;
@@ -57,33 +60,57 @@ new GLTFLoader().load('./ggw.glb',gltf=>{
      materials.forEach(mat=>{if(mat){mat.side=THREE.DoubleSide;mat.needsUpdate=true;}});
    }
  });
- sat.add(model);sat.position.set(0,0,0);sat.scale.setScalar(1);modelLoaded=true;
+ sat.add(model);sat.position.set(0,0,0);sat.scale.setScalar(1);
+ // GLBのアニメーションはAMSR3アンテナのノードだけを対象にしている
+ if(gltf.animations && gltf.animations.length){
+   mixer=new THREE.AnimationMixer(model);
+   const antennaClip=gltf.animations.find(clip=>clip.name.includes('AMSR') || clip.name.includes('antenna')) || gltf.animations[0];
+   antennaAction=mixer.clipAction(antennaClip);
+   antennaAction.play(); // 初期状態は回転開始
+ }
+ modelLoaded=true;
  status.style.display='block';
  status.textContent='GOSAT-GWの3Dモデルを読み込みました。見えない場合は「中央へ」を押してください。';
 },undefined,error=>{
  console.error(error);status.style.display='block';
  status.textContent='3Dモデルを読み込めません。HTTPSで開いているか、通信を許可しているか、index.html と ggw.glb が同じフォルダか確認してください。';
 });
-sat.rotation.set(-.18,.38,.08);let scale=1,pointers=new Map(),pinchDist=0,pinchScale=1,dragX=0,dragY=0;const canvas=renderer.domElement;
+sat.rotation.set(-.24,.58,.04);let scale=1,pointers=new Map(),pinchDist=0,pinchScale=1,dragX=0,dragY=0;const canvas=renderer.domElement;
 canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){dragX=e.clientX;dragY=e.clientY}if(pointers.size===2){const a=[...pointers.values()];pinchDist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchScale=scale}});
 canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
 if(pointers.size===1){sat.position.x+=(e.clientX-dragX)/innerWidth*3.3;sat.position.y-=(e.clientY-dragY)/innerHeight*3.3;dragX=e.clientX;dragY=e.clientY}
 if(pointers.size===2){const a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchDist>0){scale=Math.max(.35,Math.min(3.2,pinchScale*d/pinchDist));sat.scale.setScalar(scale)}}});
 function endPointer(e){pointers.delete(e.pointerId);if(pointers.size===1){const p=[...pointers.values()][0];dragX=p.x;dragY=p.y}}
 canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);
-document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.18,.38,.08);scale=1;sat.scale.setScalar(1);status.style.display='block';status.textContent=modelLoaded?'表示位置を中央に戻しました。':'3Dモデルを読み込み中です。';setTimeout(()=>{if(modelLoaded)status.style.display='none'},2200)};
+document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.24,.58,.04);scale=1;sat.scale.setScalar(1);status.style.display='block';status.textContent=modelLoaded?'表示位置を中央に戻しました。':'3Dモデルを読み込み中です。';setTimeout(()=>{if(modelLoaded)status.style.display='none'},2200)};
 // Buttons provide accessible position/size/orientation controls in addition to touch gestures.
+animButton.onclick=()=>{
+ if(!antennaAction)return;
+ animationPlaying=!animationPlaying;
+ if(animationPlaying){antennaAction.paused=false;antennaAction.play();animButton.textContent='アンテナ一時停止'}
+ else{antennaAction.paused=true;animButton.textContent='アンテナ再生'}
+};
 document.querySelector('#smaller').onclick=()=>{scale=Math.max(.35,scale/1.15);sat.scale.setScalar(scale)};
 document.querySelector('#bigger').onclick=()=>{scale=Math.min(3.2,scale*1.15);sat.scale.setScalar(scale)};
 document.querySelector('#turnLeft').onclick=()=>{sat.rotation.y-=Math.PI/12};
 document.querySelector('#turnRight').onclick=()=>{sat.rotation.y+=Math.PI/12};
 document.querySelector('#tiltUp').onclick=()=>{sat.rotation.x-=Math.PI/18};
 document.querySelector('#tiltDown').onclick=()=>{sat.rotation.x+=Math.PI/18};
-document.querySelector('#start').onclick=async()=>{try{if(!navigator.mediaDevices?.getUserMedia)throw Error('no camera');const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});video.srcObject=stream;await video.play();document.querySelector('#capture').disabled=false;status.textContent='カメラ起動中。衛星を調整して撮影してください。';setTimeout(()=>status.style.display='none',3500)}catch(e){status.style.display='block';status.textContent='カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。'}};
+document.querySelector('#start').onclick=async()=>{try{if(!navigator.mediaDevices?.getUserMedia)throw Error('no camera');const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});video.srcObject=stream;await video.play();document.querySelector('#capture').disabled=false;status.textContent='カメラ起動中。衛星を調整して撮影してください。';setTimeout(()=>status.style.display='none',3500)}catch(e){status.style.display='block';status.textContent='カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。'}};
 const photo=document.createElement('canvas'),ctx=photo.getContext('2d');
 document.querySelector('#capture').onclick=()=>{if(!video.videoWidth){status.style.display='block';status.textContent='カメラ映像の準備ができていません。';return}
-const w=video.videoWidth,h=video.videoHeight;photo.width=w;photo.height=h;ctx.drawImage(video,0,0,w,h);ctx.drawImage(renderer.domElement,0,0,w,h);
-photo.toBlob(blob=>{if(!blob){status.textContent='写真を作成できませんでした。';return}const url=URL.createObjectURL(blob),a=document.createElement('a'),stamp=new Date().toISOString().replace(/[:.]/g,'-');a.href=url;a.download='GOSAT-GW-AR-'+stamp+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);document.querySelector('#saved').textContent='保存を開始しました。通知または「ダウンロード」フォルダを確認してください。';setTimeout(()=>document.querySelector('#saved').textContent='',5000)},'image/png')};
+const w=video.videoWidth,h=video.videoHeight;
+ // 保存時だけWebGL描画をカメラ映像の実ピクセル寸法に合わせる
+ const oldPixelRatio=renderer.getPixelRatio();
+ const oldBuffer=renderer.getDrawingBufferSize(new THREE.Vector2());
+ const oldAspect=camera.aspect;
+ renderer.setPixelRatio(1);renderer.setSize(w,h,false);
+ camera.aspect=w/h;camera.updateProjectionMatrix();renderer.render(scene,camera);
+ photo.width=w;photo.height=h;ctx.drawImage(video,0,0,w,h);ctx.drawImage(renderer.domElement,0,0,w,h);
+ // 画面表示用の描画サイズ・カメラ比率を復元
+ renderer.setPixelRatio(oldPixelRatio);renderer.setSize(innerWidth,innerHeight);
+ camera.aspect=oldAspect;camera.updateProjectionMatrix();renderer.render(scene,camera);
+ photo.toBlob(blob=>{if(!blob){status.textContent='写真を作成できませんでした。';return}const url=URL.createObjectURL(blob),a=document.createElement('a'),stamp=new Date().toISOString().replace(/[:.]/g,'-');a.href=url;a.download='GOSAT-GW-AR-'+stamp+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);document.querySelector('#saved').textContent=`保存画像 ${w}×${h} px。通知または「ダウンロード」フォルダを確認してください。`;setTimeout(()=>document.querySelector('#saved').textContent='',5000)},'image/png')};
 addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()});
-function animate(){requestAnimationFrame(animate);renderer.render(scene,camera)}animate();
+function animate(){requestAnimationFrame(animate);const dt=clock.getDelta();if(mixer)mixer.update(dt);renderer.render(scene,camera)}animate();
 </script></body></html>
