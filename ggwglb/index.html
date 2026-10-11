@@ -21,20 +21,52 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
 const video=document.querySelector('#video'),host=document.querySelector('#gl'),status=document.querySelector('#status');
 const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.setClearColor(0x000000,0);host.appendChild(renderer.domElement);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWidth,innerHeight);renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;host.appendChild(renderer.domElement);
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);camera.position.set(0,0,7);
 scene.add(new THREE.AmbientLight(0xffffff,2.1));const light=new THREE.DirectionalLight(0xffffff,2.3);light.position.set(3,4,6);scene.add(light);
 const sat=new THREE.Group();scene.add(sat);let modelLoaded=false;
+ // Diagnose mobile WebGL rendering independently of the GLB model.
+ const diagCube=new THREE.Mesh(
+   new THREE.BoxGeometry(0.8,0.8,0.8),
+   new THREE.MeshNormalMaterial({wireframe:false})
+ );
+ diagCube.position.set(0,0,0);
+ diagCube.visible=true;
+ scene.add(diagCube);
+ let showDiagCube=true;
+ const diagLabel=document.createElement('div');
+ diagLabel.id='diagLabel';
+ diagLabel.textContent='診断用の立方体：表示ON';
+ diagLabel.style.cssText='position:fixed;left:10px;top:58px;z-index:20;background:rgba(0,0,0,.72);color:#fff;padding:7px 10px;border-radius:8px;font:14px sans-serif;';
+ document.body.appendChild(diagLabel);
+ const diagToggle=document.createElement('button');
+ diagToggle.textContent='立方体 ON/OFF';
+ diagToggle.style.cssText='position:fixed;left:10px;top:100px;z-index:20;padding:9px 12px;border:0;border-radius:9px;background:#fff;color:#111;font:14px sans-serif;';
+ document.body.appendChild(diagToggle);
+ diagToggle.onclick=()=>{showDiagCube=!showDiagCube;diagCube.visible=showDiagCube;diagLabel.textContent='診断用の立方体：表示'+(showDiagCube?'ON':'OFF');};
 new GLTFLoader().load('./ggw.glb',gltf=>{
  const model=gltf.scene;
+ // GLBの元座標で外接箱を計算し、縮小後の中心が原点に来るよう補正
+ model.updateMatrixWorld(true);
  const bounds=new THREE.Box3().setFromObject(model);
  const center=bounds.getCenter(new THREE.Vector3());
  const size=bounds.getSize(new THREE.Vector3());
  const maxDim=Math.max(size.x,size.y,size.z)||1;
- model.position.sub(center);
- model.scale.setScalar(2.7/maxDim);
- sat.add(model);modelLoaded=true;
- status.textContent='GOSAT-GWの3Dモデルを読み込みました。カメラ開始を押してください。';
+ const fitScale=3.4/maxDim;
+ model.scale.setScalar(fitScale);
+ model.position.set(-center.x*fitScale,-center.y*fitScale,-center.z*fitScale);
+ model.updateMatrixWorld(true);
+ // スマートフォンでも裏面や暗い材質で消えにくいよう調整
+ model.traverse(obj=>{
+   if(obj.isMesh){
+     obj.frustumCulled=false;
+     const materials=Array.isArray(obj.material)?obj.material:[obj.material];
+     materials.forEach(mat=>{if(mat){mat.side=THREE.DoubleSide;mat.needsUpdate=true;}});
+   }
+ });
+ sat.add(model);sat.position.set(0,0,0);sat.scale.setScalar(1);modelLoaded=true;
+ status.style.display='block';
+ status.textContent='GOSAT-GWの3Dモデルを読み込みました。見えない場合は「中央へ」を押してください。';
 },undefined,error=>{
  console.error(error);status.style.display='block';
  status.textContent='3Dモデルを読み込めません。HTTPSで開いているか、通信を許可しているか、index.html と ggw.glb が同じフォルダか確認してください。';
@@ -46,12 +78,12 @@ if(pointers.size===1){sat.position.x+=(e.clientX-dragX)/innerWidth*3.3;sat.posit
 if(pointers.size===2){const a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchDist>0){scale=Math.max(.35,Math.min(3.2,pinchScale*d/pinchDist));sat.scale.setScalar(scale)}}});
 function endPointer(e){pointers.delete(e.pointerId);if(pointers.size===1){const p=[...pointers.values()][0];dragX=p.x;dragY=p.y}}
 canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);
-document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.18,.38,.08);scale=1;sat.scale.setScalar(1)};
+document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.18,.38,.08);scale=1;sat.scale.setScalar(1);status.style.display='block';status.textContent=modelLoaded?'表示位置を中央に戻しました。':'3Dモデルを読み込み中です。';setTimeout(()=>{if(modelLoaded)status.style.display='none'},2200)};
 document.querySelector('#start').onclick=async()=>{try{if(!navigator.mediaDevices?.getUserMedia)throw Error('no camera');const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});video.srcObject=stream;await video.play();document.querySelector('#capture').disabled=false;status.textContent='カメラ起動中。衛星を調整して撮影してください。';setTimeout(()=>status.style.display='none',3500)}catch(e){status.style.display='block';status.textContent='カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。'}};
 const photo=document.createElement('canvas'),ctx=photo.getContext('2d');
 document.querySelector('#capture').onclick=()=>{if(!video.videoWidth){status.style.display='block';status.textContent='カメラ映像の準備ができていません。';return}
 const w=video.videoWidth,h=video.videoHeight;photo.width=w;photo.height=h;ctx.drawImage(video,0,0,w,h);ctx.drawImage(renderer.domElement,0,0,w,h);
 photo.toBlob(blob=>{if(!blob){status.textContent='写真を作成できませんでした。';return}const url=URL.createObjectURL(blob),a=document.createElement('a'),stamp=new Date().toISOString().replace(/[:.]/g,'-');a.href=url;a.download='GOSAT-GW-AR-'+stamp+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);document.querySelector('#saved').textContent='保存を開始しました。通知または「ダウンロード」フォルダを確認してください。';setTimeout(()=>document.querySelector('#saved').textContent='',5000)},'image/png')};
 addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()});
-function animate(){requestAnimationFrame(animate);renderer.render(scene,camera)}animate();
+function animate(){requestAnimationFrame(animate);diagCube.rotation.x+=0.008;diagCube.rotation.y+=0.012;renderer.render(scene,camera)}animate();
 </script></body></html>
