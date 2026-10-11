@@ -6,15 +6,26 @@
 #video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}#gl{position:fixed;inset:0;width:100%;height:100%;z-index:1;touch-action:none}
 #top{position:fixed;z-index:3;left:0;right:0;top:0;padding:12px 12px 20px;color:white;background:linear-gradient(#000b,transparent)}
 h1{font-size:18px;margin:0 0 5px}p{font-size:12px;margin:4px 0;line-height:1.45}
-#controls{position:fixed;z-index:4;left:0;right:0;bottom:0;padding:14px 12px calc(14px + env(safe-area-inset-bottom));display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;background:linear-gradient(transparent,#000c 20%)}
-button{border:0;border-radius:999px;padding:12px 15px;font-size:15px;font-weight:650;background:#f4f4f4;color:#101010}button.primary{background:#2f80ed;color:white;font-size:17px;padding:15px 22px}button:disabled{opacity:.45}
+#adjust{position:fixed;z-index:4;left:8px;right:8px;bottom:104px;padding:8px;display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;background:#0009;border-radius:14px}
+#controls{position:fixed;z-index:4;left:0;right:0;bottom:0;padding:12px 10px calc(12px + env(safe-area-inset-bottom));display:flex;gap:7px;justify-content:center;align-items:center;flex-wrap:wrap;background:linear-gradient(transparent,#000c 20%)}
+button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight:650;background:#f4f4f4;color:#101010;touch-action:manipulation}button.primary{background:#2f80ed;color:white;font-size:16px;padding:13px 18px}button:disabled{opacity:.45}
+#adjust button{padding:9px 12px;min-width:48px}#adjust .hint{color:white;font-size:12px;width:100%;text-align:center}
 #status{position:fixed;z-index:5;left:50%;top:92px;transform:translateX(-50%);max-width:90%;padding:9px 12px;border-radius:10px;background:#111d;color:white;text-align:center;font-size:13px}
 #saved{position:fixed;z-index:5;left:10px;right:10px;bottom:100px;color:white;text-align:center;font-size:13px;text-shadow:0 1px 3px #000;pointer-events:none}
 </style></head><body>
 <video id="video" autoplay playsinline muted></video><div id="gl"></div>
 <div id="top"><h1>GOSAT-GW ARカメラ（GLB版）</h1><p>カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。</p><p>モデル読込に失敗した場合は、index.html と ggw.glb が同じフォルダにあるか確認してください。</p></div>
 <div id="status">「カメラ開始」を押してください</div><div id="saved"></div>
-<div id="controls"><button id="start">カメラ開始</button><button id="reset">中央へ</button><button class="primary" id="capture" disabled>● 撮影・保存</button></div>
+<div id="adjust">
+ <span class="hint">指1本で移動・2本指で拡大縮小。ボタンで向きも調整できます。</span>
+ <button id="smaller" aria-label="小さく">− 小さく</button>
+ <button id="bigger" aria-label="大きく">＋ 大きく</button>
+ <button id="turnLeft" aria-label="左に回転">↶ 左回転</button>
+ <button id="turnRight" aria-label="右に回転">↷ 右回転</button>
+ <button id="tiltUp" aria-label="上向き">↑ 傾き</button>
+ <button id="tiltDown" aria-label="下向き">↓ 傾き</button>
+</div>
+<div id="controls"><button id="start">カメラ開始</button><button id="reset">初期位置</button><button class="primary" id="capture" disabled>● 撮影・保存</button></div>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
 <script type="module">
 import * as THREE from 'three';
@@ -61,6 +72,13 @@ if(pointers.size===2){const a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,
 function endPointer(e){pointers.delete(e.pointerId);if(pointers.size===1){const p=[...pointers.values()][0];dragX=p.x;dragY=p.y}}
 canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);
 document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.18,.38,.08);scale=1;sat.scale.setScalar(1);status.style.display='block';status.textContent=modelLoaded?'表示位置を中央に戻しました。':'3Dモデルを読み込み中です。';setTimeout(()=>{if(modelLoaded)status.style.display='none'},2200)};
+// Buttons provide accessible position/size/orientation controls in addition to touch gestures.
+document.querySelector('#smaller').onclick=()=>{scale=Math.max(.35,scale/1.15);sat.scale.setScalar(scale)};
+document.querySelector('#bigger').onclick=()=>{scale=Math.min(3.2,scale*1.15);sat.scale.setScalar(scale)};
+document.querySelector('#turnLeft').onclick=()=>{sat.rotation.y-=Math.PI/12};
+document.querySelector('#turnRight').onclick=()=>{sat.rotation.y+=Math.PI/12};
+document.querySelector('#tiltUp').onclick=()=>{sat.rotation.x-=Math.PI/18};
+document.querySelector('#tiltDown').onclick=()=>{sat.rotation.x+=Math.PI/18};
 document.querySelector('#start').onclick=async()=>{try{if(!navigator.mediaDevices?.getUserMedia)throw Error('no camera');const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});video.srcObject=stream;await video.play();document.querySelector('#capture').disabled=false;status.textContent='カメラ起動中。衛星を調整して撮影してください。';setTimeout(()=>status.style.display='none',3500)}catch(e){status.style.display='block';status.textContent='カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。'}};
 const photo=document.createElement('canvas'),ctx=photo.getContext('2d');
 document.querySelector('#capture').onclick=()=>{if(!video.videoWidth){status.style.display='block';status.textContent='カメラ映像の準備ができていません。';return}
