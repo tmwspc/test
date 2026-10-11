@@ -75,14 +75,14 @@ new GLTFLoader().load('./ggw.glb',gltf=>{
  console.error(error);status.style.display='block';
  status.textContent='3Dモデルを読み込めません。HTTPSで開いているか、通信を許可しているか、index.html と ggw.glb が同じフォルダか確認してください。';
 });
-sat.rotation.set(-.24,.58,.04);let scale=1,pointers=new Map(),pinchDist=0,pinchScale=1,dragX=0,dragY=0;const canvas=renderer.domElement;
+sat.rotation.set(-.24,1.05,.04);let scale=1,pointers=new Map(),pinchDist=0,pinchScale=1,dragX=0,dragY=0;const canvas=renderer.domElement;
 canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){dragX=e.clientX;dragY=e.clientY}if(pointers.size===2){const a=[...pointers.values()];pinchDist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchScale=scale}});
 canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
 if(pointers.size===1){sat.position.x+=(e.clientX-dragX)/innerWidth*3.3;sat.position.y-=(e.clientY-dragY)/innerHeight*3.3;dragX=e.clientX;dragY=e.clientY}
 if(pointers.size===2){const a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchDist>0){scale=Math.max(.35,Math.min(3.2,pinchScale*d/pinchDist));sat.scale.setScalar(scale)}}});
 function endPointer(e){pointers.delete(e.pointerId);if(pointers.size===1){const p=[...pointers.values()][0];dragX=p.x;dragY=p.y}}
 canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);
-document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.24,.58,.04);scale=1;sat.scale.setScalar(1);status.style.display='block';status.textContent=modelLoaded?'表示位置を中央に戻しました。':'3Dモデルを読み込み中です。';setTimeout(()=>{if(modelLoaded)status.style.display='none'},2200)};
+document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.24,1.05,.04);scale=1;sat.scale.setScalar(1);status.style.display='block';status.textContent=modelLoaded?'表示位置を中央に戻しました。':'3Dモデルを読み込み中です。';setTimeout(()=>{if(modelLoaded)status.style.display='none'},2200)};
 // Buttons provide accessible position/size/orientation controls in addition to touch gestures.
 animButton.onclick=()=>{
  if(!antennaAction)return;
