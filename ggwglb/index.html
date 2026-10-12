@@ -12,6 +12,19 @@ button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight
 #adjust button{padding:9px 12px;min-width:48px}#adjust .hint{color:white;font-size:12px;width:100%;text-align:center}
 #status{position:fixed;z-index:5;left:50%;top:92px;transform:translateX(-50%);max-width:90%;padding:9px 12px;border-radius:10px;background:#111d;color:white;text-align:center;font-size:13px}
 #saved{position:fixed;z-index:5;left:10px;right:10px;bottom:100px;color:white;text-align:center;font-size:13px;text-shadow:0 1px 3px #000;pointer-events:none}
+#share{display:none}
+@media (orientation:landscape) and (max-height:600px){
+ #top{padding:6px 10px 12px;max-width:70%}
+ h1{font-size:15px}p{font-size:11px}
+ #adjust{left:auto;right:6px;top:8px;bottom:68px;width:min(34vw,260px);padding:5px;gap:4px}
+ #adjust button{padding:6px 8px;min-width:40px;font-size:12px}
+ #adjust .hint{font-size:10px}
+ #controls{padding:6px 8px calc(6px + env(safe-area-inset-bottom));gap:5px}
+ #controls button{padding:8px 10px;font-size:12px}
+ #controls button.primary{font-size:14px;padding:9px 13px}
+ #status{top:58px;font-size:12px}
+ #saved{bottom:60px;font-size:11px}
+}
 </style></head><body>
 <video id="video" autoplay playsinline muted></video><div id="gl"></div>
 <div id="top"><h1>GOSAT-GW ARカメラ（GLB版）</h1><p>カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。</p><p>モデル読込に失敗した場合は、index.html と ggw.glb が同じフォルダにあるか確認してください。</p></div>
@@ -25,14 +38,28 @@ button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight
  <button id="tiltUp" aria-label="上向き">↑ 傾き</button>
  <button id="tiltDown" aria-label="下向き">↓ 傾き</button>
 </div>
-<div id="controls"><button id="start">カメラ開始</button><button id="animToggle">アンテナ一時停止</button><button id="reset">初期位置</button><button class="primary" id="capture" disabled>● 撮影・保存</button></div>
+<div id="controls"><button id="start">カメラ開始</button><button id="animToggle">アンテナ一時停止</button><button id="reset">初期位置</button><button class="primary" id="capture" disabled>● 撮影・保存</button><button id="share" disabled>共有・写真に保存</button></div>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
+
+// URLで冒頭の説明だけを切り替える: ?lang=en / ?lang=kids
+const lang=new URLSearchParams(location.search).get('lang');
+const introCopy={
+ ja:{title:'GOSAT-GW ARカメラ（GLB版）',intro:'カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。',help:'モデル読込に失敗した場合は、index.html と ggw.glb が同じフォルダにあるか確認してください。'},
+ en:{title:'GOSAT-GW AR Camera',intro:'Overlay the 3D satellite model on your camera view. Drag with one finger and pinch with two fingers to resize.',help:'If the model does not load, make sure index.html and ggw.glb are in the same folder.'},
+ kids:{title:'GOSAT-GW うちゅうカメラ',intro:'カメラに人工衛星を重ねてみよう！ 指1本で動かして、2本の指で大きさを変えられるよ。',help:'衛星が出ないときは、index.html と ggw.glb が同じフォルダにあるか確認してね。'}
+};
+const intro=introCopy[lang==='en'?'en':lang==='kids'?'kids':'ja'];
+document.querySelector('#top h1').textContent=intro.title;
+const introPs=document.querySelectorAll('#top p');
+introPs[0].textContent=intro.intro;introPs[1].textContent=intro.help;
 const video=document.querySelector('#video'),host=document.querySelector('#gl'),status=document.querySelector('#status');
 const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWidth,innerHeight);renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;host.appendChild(renderer.domElement);
+function resizeView(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
+
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);camera.position.set(0,0,7);
 scene.add(new THREE.AmbientLight(0xffffff,2.1));const light=new THREE.DirectionalLight(0xffffff,2.3);light.position.set(3,4,6);scene.add(light);
 const sat=new THREE.Group();scene.add(sat);let modelLoaded=false;
@@ -98,19 +125,56 @@ document.querySelector('#tiltUp').onclick=()=>{sat.rotation.x-=Math.PI/18};
 document.querySelector('#tiltDown').onclick=()=>{sat.rotation.x+=Math.PI/18};
 document.querySelector('#start').onclick=async()=>{try{if(!navigator.mediaDevices?.getUserMedia)throw Error('no camera');const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});video.srcObject=stream;await video.play();document.querySelector('#capture').disabled=false;status.textContent='カメラ起動中。衛星を調整して撮影してください。';setTimeout(()=>status.style.display='none',3500)}catch(e){status.style.display='block';status.textContent='カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。'}};
 const photo=document.createElement('canvas'),ctx=photo.getContext('2d');
-document.querySelector('#capture').onclick=()=>{if(!video.videoWidth){status.style.display='block';status.textContent='カメラ映像の準備ができていません。';return}
-const w=video.videoWidth,h=video.videoHeight;
- // 保存時だけWebGL描画をカメラ映像の実ピクセル寸法に合わせる
- const oldPixelRatio=renderer.getPixelRatio();
- const oldBuffer=renderer.getDrawingBufferSize(new THREE.Vector2());
- const oldAspect=camera.aspect;
+const shareButton=document.querySelector('#share');
+let latestPhotoBlob=null,latestPhotoName='';
+function drawVideoCover(targetCtx,source,w,h){
+ // Match object-fit:cover while keeping the saved image orientation aligned to the phone.
+ const sw=source.videoWidth,sh=source.videoHeight,srcRatio=sw/sh,dstRatio=w/h;
+ let sx=0,sy=0,sWidth=sw,sHeight=sh;
+ if(srcRatio>dstRatio){sWidth=sh*dstRatio;sx=(sw-sWidth)/2}
+ else if(srcRatio<dstRatio){sHeight=sw/dstRatio;sy=(sh-sHeight)/2}
+ targetCtx.drawImage(source,sx,sy,sWidth,sHeight,0,0,w,h);
+}
+document.querySelector('#capture').onclick=()=>{
+ if(!video.videoWidth){status.style.display='block';status.textContent='カメラ映像の準備ができていません。';return}
+ // Output orientation follows the current viewport; use the camera's native long/short edge resolution.
+ const landscape=innerWidth>=innerHeight;
+ const longEdge=Math.max(video.videoWidth,video.videoHeight),shortEdge=Math.min(video.videoWidth,video.videoHeight);
+ const w=landscape?longEdge:shortEdge,h=landscape?shortEdge:longEdge;
+ const oldPixelRatio=renderer.getPixelRatio(),oldAspect=camera.aspect;
  renderer.setPixelRatio(1);renderer.setSize(w,h,false);
  camera.aspect=w/h;camera.updateProjectionMatrix();renderer.render(scene,camera);
- photo.width=w;photo.height=h;ctx.drawImage(video,0,0,w,h);ctx.drawImage(renderer.domElement,0,0,w,h);
- // 画面表示用の描画サイズ・カメラ比率を復元
- renderer.setPixelRatio(oldPixelRatio);renderer.setSize(innerWidth,innerHeight);
- camera.aspect=oldAspect;camera.updateProjectionMatrix();renderer.render(scene,camera);
- photo.toBlob(blob=>{if(!blob){status.textContent='写真を作成できませんでした。';return}const url=URL.createObjectURL(blob),a=document.createElement('a'),stamp=new Date().toISOString().replace(/[:.]/g,'-');a.href=url;a.download='GOSAT-GW-AR-'+stamp+'.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);document.querySelector('#saved').textContent=`保存画像 ${w}×${h} px。通知または「ダウンロード」フォルダを確認してください。`;setTimeout(()=>document.querySelector('#saved').textContent='',5000)},'image/png')};
-addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()});
+ photo.width=w;photo.height=h;drawVideoCover(ctx,video,w,h);ctx.drawImage(renderer.domElement,0,0,w,h);
+ renderer.setPixelRatio(oldPixelRatio);resizeView();renderer.render(scene,camera);
+ photo.toBlob(blob=>{
+  if(!blob){status.style.display='block';status.textContent='写真を作成できませんでした。';return}
+  latestPhotoBlob=blob;
+  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+  latestPhotoName='GOSAT-GW-AR-'+stamp+'.png';
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=latestPhotoName;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+  shareButton.style.display='inline-block';shareButton.disabled=false;
+  document.querySelector('#saved').textContent=`保存画像 ${w}×${h} px。ダウンロードに加え、「共有・写真に保存」も使えます。`;
+  setTimeout(()=>document.querySelector('#saved').textContent='',6000)
+ },'image/png')
+};
+shareButton.onclick=async()=>{
+ if(!latestPhotoBlob)return;
+ const file=new File([latestPhotoBlob],latestPhotoName||'GOSAT-GW-AR.png',{type:'image/png'});
+ try{
+  if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
+   await navigator.share({files:[file],title:'GOSAT-GW AR写真'});
+  }else{
+   status.style.display='block';status.textContent='このブラウザは画像共有に対応していません。ダウンロードした画像を写真アプリに保存してください。';
+   setTimeout(()=>status.style.display='none',4500);
+  }
+ }catch(e){
+  if(e.name!=='AbortError'){status.style.display='block';status.textContent='共有できませんでした。ダウンロードした画像をご利用ください。';setTimeout(()=>status.style.display='none',4500)}
+ }
+};
+addEventListener('resize',resizeView);
+addEventListener('orientationchange',()=>setTimeout(resizeView,250));
+if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',()=>setTimeout(resizeView,100));
 function animate(){requestAnimationFrame(animate);const dt=clock.getDelta();if(mixer)mixer.update(dt);renderer.render(scene,camera)}animate();
 </script></body></html>
