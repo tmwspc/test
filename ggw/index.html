@@ -64,8 +64,12 @@ function setIntroCollapsed(collapsed){
 }
 introToggle.addEventListener('click',()=>setIntroCollapsed(!topPanel.classList.contains('collapsed')));
 function updateOrientationLayout(){
+ // Android Chrome sometimes keeps screen.orientation.type stale during rotation.
+ // Prefer the actual available viewport dimensions, and also listen to orientation APIs.
  const orientationType=screen.orientation&&screen.orientation.type;
- const isLandscape=(orientationType&&orientationType.startsWith('landscape')) || (!orientationType&&innerWidth>innerHeight);
+ const viewportLandscape=innerWidth>innerHeight;
+ const apiLandscape=!!(orientationType&&orientationType.startsWith('landscape'));
+ const isLandscape=viewportLandscape||apiLandscape;
  document.body.classList.toggle('landscape',!!isLandscape);
  resizeView();
 }
@@ -187,10 +191,19 @@ shareButton.onclick=async()=>{
   if(e.name!=='AbortError'){status.style.display='block';status.textContent='共有できませんでした。ダウンロードした画像をご利用ください。';setTimeout(()=>status.style.display='none',4500)}
  }
 };
-addEventListener('resize',()=>setTimeout(updateOrientationLayout,80));
-addEventListener('orientationchange',()=>setTimeout(updateOrientationLayout,250));
-if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',()=>setTimeout(updateOrientationLayout,100));
-if(window.visualViewport)visualViewport.addEventListener('resize',()=>setTimeout(updateOrientationLayout,80));
+addEventListener('resize',()=>{
+ setTimeout(updateOrientationLayout,80);
+ setTimeout(updateOrientationLayout,350);
+});
+addEventListener('orientationchange',()=>{
+ setTimeout(updateOrientationLayout,150);
+ setTimeout(updateOrientationLayout,450);
+});
+if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',()=>{
+ setTimeout(updateOrientationLayout,100);
+ setTimeout(updateOrientationLayout,400);
+});
+if(window.visualViewport)visualViewport.addEventListener('resize',()=>setTimeout(updateOrientationLayout,100));
 updateOrientationLayout();
 function animate(){requestAnimationFrame(animate);const dt=clock.getDelta();if(mixer)mixer.update(dt);renderer.render(scene,camera)}animate();
 </script></body></html>

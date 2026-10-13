@@ -25,3 +25,7 @@ GOSAT-GW ARカメラ（説明切替・縦横対応・写真共有版）
 - カメラ開始後に説明文を自動で折りたたみます。右上の「説明を表示」で再表示できます。
 - 説明文の領域が衛星操作のタッチを遮らないようにしました。
 - Android向けに screen.orientation、resize、orientationchange、visualViewport の変化を監視して画面レイアウトを更新します。
+
+Android横向き追加修正:
+- screen.orientation.type の値が古いままの場合に備え、実際の表示領域 innerWidth/innerHeight も優先して横向きを判定します。
+- Android Chromeで画面サイズの更新が少し遅れる場合に備え、回転後のレイアウト更新を複数回行います。
