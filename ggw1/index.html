@@ -11,7 +11,8 @@ h1{font-size:18px;margin:0 0 5px}p{font-size:12px;margin:4px 0;line-height:1.45}
 button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight:650;background:#f4f4f4;color:#101010;touch-action:manipulation}button.primary{background:#2f80ed;color:white;font-size:16px;padding:13px 18px}button:disabled{opacity:.45}
 #adjust button{padding:9px 12px;min-width:48px}#adjust .hint{color:white;font-size:12px;width:100%;text-align:center}
 #status{position:fixed;z-index:5;left:50%;top:92px;transform:translateX(-50%);max-width:90%;padding:9px 12px;border-radius:10px;background:#111d;color:white;text-align:center;font-size:13px}
-#saved{position:fixed;z-index:5;left:10px;right:10px;bottom:100px;color:white;text-align:center;font-size:13px;text-shadow:0 1px 3px #000;pointer-events:none}
+#saved{display:none;position:fixed;z-index:7;top:48px;left:10px;right:10px;max-width:560px;margin:0 auto;padding:12px 12px 10px;border:1px solid #ffffff55;border-radius:12px;background:#101820f2;color:white;text-align:left;font-size:13px;line-height:1.45;box-shadow:0 4px 18px #0008}
+#saved.visible{display:block}#savedClose{display:block;margin:8px 0 0 auto;padding:6px 12px;font-size:12px}
 #share{display:none}
 @media (orientation:landscape) and (max-height:600px), body.landscape{
  #top{padding:6px 10px 12px;max-width:70%}
@@ -23,12 +24,12 @@ button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight
  #controls button{padding:8px 10px;font-size:12px}
  #controls button.primary{font-size:14px;padding:9px 13px}
  #status{top:58px;font-size:12px}
- #saved{bottom:60px;font-size:11px}
+ #saved{top:40px;font-size:12px;max-width:70vw}
 }
 </style></head><body>
 <video id="video" autoplay playsinline muted></video><div id="gl"></div>
 <div id="top"><h1>GOSAT-GW ARカメラ（GLB版）</h1><p>カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。</p><p>モデル読込に失敗した場合は、index.html と ggw.glb が同じフォルダにあるか確認してください。</p></div>
-<button id="introToggle" type="button">説明を隠す</button><div id="status">「カメラ開始」を押してください</div><div id="saved"></div>
+<button id="introToggle" type="button">説明を隠す</button><div id="status">「カメラ開始」を押してください</div><div id="saved"><span id="savedText"></span><button id="savedClose" type="button">閉じる</button></div>
 <div id="adjust">
  <span class="hint">指1本で移動・2本指で拡大縮小。ボタンで向きも調整できます。</span>
  <button id="smaller" aria-label="小さく">− 小さく</button>
@@ -38,7 +39,7 @@ button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight
  <button id="tiltUp" aria-label="上向き">↑ 傾き</button>
  <button id="tiltDown" aria-label="下向き">↓ 傾き</button>
 </div>
-<div id="controls"><button id="start">カメラ開始</button><button id="animToggle">アンテナ一時停止</button><button id="reset">初期位置</button><button class="primary" id="capture" disabled>● 撮影・保存</button><button id="share" disabled>共有・写真に保存</button></div>
+<div id="controls"><button id="start">カメラ開始</button><button id="animToggle">アンテナ一時停止</button><button id="reset">初期位置</button><button class="primary" id="capture" disabled>● 撮影・保存</button><button id="share" disabled>共有メニューを開く</button></div>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
 <script type="module">
 import * as THREE from 'three';
@@ -64,8 +65,12 @@ function setIntroCollapsed(collapsed){
 }
 introToggle.addEventListener('click',()=>setIntroCollapsed(!topPanel.classList.contains('collapsed')));
 function updateOrientationLayout(){
+ // Android Chrome sometimes keeps screen.orientation.type stale during rotation.
+ // Prefer the actual available viewport dimensions, and also listen to orientation APIs.
  const orientationType=screen.orientation&&screen.orientation.type;
- const isLandscape=(orientationType&&orientationType.startsWith('landscape')) || (!orientationType&&innerWidth>innerHeight);
+ const viewportLandscape=innerWidth>innerHeight;
+ const apiLandscape=!!(orientationType&&orientationType.startsWith('landscape'));
+ const isLandscape=viewportLandscape||apiLandscape;
  document.body.classList.toggle('landscape',!!isLandscape);
  resizeView();
 }
@@ -169,16 +174,21 @@ document.querySelector('#capture').onclick=()=>{
   a.href=url;a.download=latestPhotoName;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),10000);
   shareButton.style.display='inline-block';shareButton.disabled=false;
-  document.querySelector('#saved').textContent=`保存画像 ${w}×${h} px。ダウンロードに加え、「共有・写真に保存」も使えます。`;
-  setTimeout(()=>document.querySelector('#saved').textContent='',6000)
+  const saved=document.querySelector('#saved'),savedText=document.querySelector('#savedText');
+  savedText.textContent=/Android/i.test(navigator.userAgent)
+   ? `写真を撮影し、PNG画像をダウンロードしました（${w}×${h} px）。すぐ開くには、ブラウザの「ダウンロード完了」通知をタップしてください。あとで探す場合は、Googleフォトの「コレクション」→「このデバイス内」→「Download」などを確認してください（機種により表示が異なります）。別のアプリに送るときは「共有メニューを開く」を押します。`
+   : `写真を撮影し、PNG画像をダウンロードしました（${w}×${h} px）。iPhoneでは「ファイル」アプリの「ダウンロード」に入る場合があります。写真アプリに入れるには「共有メニューを開く」を押し、共有先に「画像を保存」があれば選んでください。`;
+  saved.classList.add('visible');
  },'image/png')
 };
+document.querySelector('#savedClose').onclick=()=>document.querySelector('#saved').classList.remove('visible');
 shareButton.onclick=async()=>{
  if(!latestPhotoBlob)return;
  const file=new File([latestPhotoBlob],latestPhotoName||'GOSAT-GW-AR.png',{type:'image/png'});
  try{
   if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
    await navigator.share({files:[file],title:'GOSAT-GW AR写真'});
+   status.style.display='block';status.textContent='共有先を選んでください。写真アプリに保存する項目がない場合は、撮影後の案内にあるダウンロード先を確認してください。';setTimeout(()=>status.style.display='none',5000);
   }else{
    status.style.display='block';status.textContent='このブラウザは画像共有に対応していません。ダウンロードした画像を写真アプリに保存してください。';
    setTimeout(()=>status.style.display='none',4500);
@@ -187,10 +197,19 @@ shareButton.onclick=async()=>{
   if(e.name!=='AbortError'){status.style.display='block';status.textContent='共有できませんでした。ダウンロードした画像をご利用ください。';setTimeout(()=>status.style.display='none',4500)}
  }
 };
-addEventListener('resize',()=>setTimeout(updateOrientationLayout,80));
-addEventListener('orientationchange',()=>setTimeout(updateOrientationLayout,250));
-if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',()=>setTimeout(updateOrientationLayout,100));
-if(window.visualViewport)visualViewport.addEventListener('resize',()=>setTimeout(updateOrientationLayout,80));
+addEventListener('resize',()=>{
+ setTimeout(updateOrientationLayout,80);
+ setTimeout(updateOrientationLayout,350);
+});
+addEventListener('orientationchange',()=>{
+ setTimeout(updateOrientationLayout,150);
+ setTimeout(updateOrientationLayout,450);
+});
+if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',()=>{
+ setTimeout(updateOrientationLayout,100);
+ setTimeout(updateOrientationLayout,400);
+});
+if(window.visualViewport)visualViewport.addEventListener('resize',()=>setTimeout(updateOrientationLayout,100));
 updateOrientationLayout();
 function animate(){requestAnimationFrame(animate);const dt=clock.getDelta();if(mixer)mixer.update(dt);renderer.render(scene,camera)}animate();
 </script></body></html>
