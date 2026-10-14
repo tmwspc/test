@@ -28,7 +28,7 @@ button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight
 }
 </style></head><body>
 <video id="video" autoplay playsinline muted></video><div id="gl"></div>
-<div id="top"><h1>いぶきGW ARカメラ</h1><p>カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。</p><p>モデル読込に失敗した場合は、index.html と ggw.glb が同じフォルダにあるか確認してください。</p></div>
+<div id="top"><h1>いぶきGW ARカメラ</h1><p>カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。</p></div>
 <button id="introToggle" type="button">説明を隠す</button><div id="status">「カメラ開始」を押してください</div><div id="saved"><span id="savedText"></span><button id="savedClose" type="button">閉じる</button></div>
 <div id="adjust">
  <span class="hint">指1本で移動・2本指で拡大縮小。ボタンで向きも調整できます。</span>
@@ -50,14 +50,14 @@ const queryLang=new URLSearchParams(location.search).get('lang');
 const fileLang=(location.pathname.endsWith('index_en.html')||location.pathname.includes('/en/'))?'en':(location.pathname.endsWith('index_kids.html')||location.pathname.includes('/kids/'))?'kids':null;
 const lang=queryLang||fileLang;
 const introCopy={
- ja:{title:'いぶきGW ARカメラ',intro:'カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。',help:'モデル読込に失敗した場合は、index.html と ggw.glb が同じフォルダにあるか確認してください。'},
- en:{title:'IBUKI GW AR Camera',intro:'Overlay the 3D satellite model on your camera view. Drag with one finger and pinch with two fingers to resize.',help:'If the model does not load, make sure index.html and ggw.glb are in the same folder.'},
- kids:{title:'いぶきGW うちゅうカメラ',intro:'カメラに人工衛星を重ねてみよう！ 指1本で動かして、2本の指で大きさを変えられるよ。',help:'衛星が出ないときは、index.html と ggw.glb が同じフォルダにあるか確認してね。'}
+ ja:{title:'いぶきGW ARカメラ',intro:'カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。'},
+ en:{title:'IBUKI GW AR Camera',intro:'Overlay the 3D satellite model on your camera view. Drag with one finger and pinch with two fingers to resize.'},
+ kids:{title:'いぶきGW うちゅうカメラ',intro:'カメラに人工衛星を重ねてみよう！ 指1本で動かして、2本の指で大きさを変えられるよ。'}
 };
 const intro=introCopy[lang==='en'?'en':lang==='kids'?'kids':'ja'];
 document.querySelector('#top h1').textContent=intro.title;
 const introPs=document.querySelectorAll('#top p');
-introPs[0].textContent=intro.intro;introPs[1].textContent=intro.help;
+introPs[0].textContent=intro.intro;
 
 // 説明文はカメラ開始後に自動で折りたたみ、必要なときだけ再表示。
 const topPanel=document.querySelector('#top'),introToggle=document.querySelector('#introToggle');
@@ -118,10 +118,10 @@ new GLTFLoader().load('./ggw.glb',gltf=>{
  }
  modelLoaded=true;
  status.style.display='block';
- status.textContent='いぶきGWの3Dモデルを読み込みました。見えない場合は「中央へ」を押してください。';
+ status.textContent='3Dモデルを読み込みました。';
 },undefined,error=>{
  console.error(error);status.style.display='block';
- status.textContent='3Dモデルを読み込めません。HTTPSで開いているか、通信を許可しているか、index.html と ggw.glb が同じフォルダか確認してください。';
+ status.textContent='3Dモデルを読み込めませんでした。';
 });
 sat.rotation.set(-.24,3.72,.04);let scale=1,pointers=new Map(),pinchDist=0,pinchScale=1,dragX=0,dragY=0;const canvas=renderer.domElement;
 canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){dragX=e.clientX;dragY=e.clientY}if(pointers.size===2){const a=[...pointers.values()];pinchDist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchScale=scale}});
@@ -229,8 +229,8 @@ function animate(){requestAnimationFrame(animate);const dt=clock.getDelta();if(m
   '− 小さく':'− Smaller','＋ 大きく':'＋ Bigger','↶ 左回転':'↶ Rotate left','↷ 右回転':'↷ Rotate right','↑ 傾き':'↑ Tilt up','↓ 傾き':'↓ Tilt down',
   'カメラ開始':'Start camera','アンテナ一時停止':'Pause antenna','アンテナ再生':'Play antenna','初期位置':'Reset position','● 撮影・保存':'● Take photo & save','共有メニューを開く':'Share photo',
   'カメラ起動中。衛星を調整して撮影してください。':'Camera is on. Position the satellite, then take a photo.',
-  'いぶきGWの3Dモデルを読み込みました。見えない場合は「中央へ」を押してください。':'The IBUKI GW 3D model is loaded. If you cannot see it, try Reset position.',
-  '3Dモデルを読み込めません。HTTPSで開いているか、通信を許可しているか、index.html と ggw.glb が同じフォルダか確認してください。':'Could not load the 3D model. Use HTTPS, allow network access, and keep this HTML file and ggw.glb in the same folder.',
+  '3Dモデルを読み込みました。':'The 3D model is loaded.',
+  '3Dモデルを読み込めませんでした。':'Could not load the 3D model.',
   '表示位置を中央に戻しました。':'Satellite position reset.','3Dモデルを読み込み中です。':'Loading the 3D model…',
   'カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。':'Could not start the camera. Open this page over HTTPS and allow camera access.',
   'カメラ映像の準備ができていません。':'Camera video is not ready yet.','写真を作成できませんでした。':'Could not create the photo.',
@@ -249,8 +249,8 @@ function animate(){requestAnimationFrame(animate);const dt=clock.getDelta();if(m
   '− 小さく':'− ちいさく','＋ 大きく':'＋ おおきく','↶ 左回転':'↶ 左にまわす','↷ 右回転':'↷ 右にまわす','↑ 傾き':'↑ 上にかたむける','↓ 傾き':'↓ 下にかたむける',
   'カメラ開始':'カメラ開始','アンテナ一時停止':'アンテナをとめる','アンテナ再生':'アンテナをうごかす','初期位置':'まんなかにもどす','● 撮影・保存':'● しゃしんをとる','共有メニューを開く':'ほかのアプリでひらく',
   'カメラ起動中。衛星を調整して撮影してください。':'カメラがうごいたよ！ いぶきGWをうごかして、しゃしんをとろう。',
-  'いぶきGWの3Dモデルを読み込みました。見えない場合は「中央へ」を押してください。':'いぶきGWがあらわれたよ！ みえないときは「まんなかにもどす」をおしてね。',
-  '3Dモデルを読み込めません。HTTPSで開いているか、通信を許可しているか、index.html と ggw.glb が同じフォルダか確認してください。':'いぶきGWがでてこないときは、おとなの人にたすけてもらってね。',
+  '3Dモデルを読み込みました。':'いぶきGWがあらわれたよ！',
+  '3Dモデルを読み込めませんでした。':'いぶきGWをよみこめなかったよ。',
   '表示位置を中央に戻しました。':'まんなかにもどしたよ。','3Dモデルを読み込み中です。':'いぶきGWをよみこんでいるよ…',
   'カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。':'カメラがつかえないみたい。おとなの人と設定をたしかめてね。',
   'カメラ映像の準備ができていません。':'カメラのじゅんび中だよ。','写真を作成できませんでした。':'しゃしんをつくれなかったよ。',
