@@ -44,6 +44,7 @@ button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/environments/RoomEnvironment.js';
 
 // URLで冒頭の説明だけを切り替える: ?lang=en / ?lang=kids
 const queryLang=new URLSearchParams(location.search).get('lang');
@@ -78,11 +79,17 @@ function updateOrientationLayout(){
 }
 const video=document.querySelector('#video'),host=document.querySelector('#gl'),status=document.querySelector('#status');
 const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWidth,innerHeight);renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;host.appendChild(renderer.domElement);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWidth,innerHeight);renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.0;host.appendChild(renderer.domElement);
 function resizeView(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
 
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);camera.position.set(0,0,7);
-scene.add(new THREE.AmbientLight(0xffffff,2.1));const light=new THREE.DirectionalLight(0xffffff,2.3);light.position.set(3,4,6);scene.add(light);
+// Use a neutral studio environment so GLB metallic/roughness materials can show reflections.
+const pmremGenerator=new THREE.PMREMGenerator(renderer);
+const environmentTexture=pmremGenerator.fromScene(new RoomEnvironment(),0.04).texture;
+scene.environment=environmentTexture;
+pmremGenerator.dispose();
+scene.add(new THREE.AmbientLight(0xffffff,1.25));const light=new THREE.DirectionalLight(0xffffff,2.0);light.position.set(3,4,6);scene.add(light);
+const fillLight=new THREE.DirectionalLight(0xb8d7ff,0.45);fillLight.position.set(-4,-2,3);scene.add(fillLight);
 const sat=new THREE.Group();scene.add(sat);let modelLoaded=false;
 let mixer=null, antennaAction=null, animationPlaying=true;
 const clock=new THREE.Clock();
