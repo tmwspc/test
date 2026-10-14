@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>いぶきGW ARカメラ</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070b;font-family:system-ui,sans-serif}
+#video{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}#gl{position:fixed;inset:0;width:100%;height:100%;z-index:1;touch-action:none}
+#top{position:fixed;z-index:3;left:0;right:0;top:0;padding:12px 12px 20px;color:white;background:linear-gradient(#000b,transparent);pointer-events:none}#top.collapsed{display:none}#introToggle{display:none;position:fixed;z-index:6;top:8px;right:8px;padding:8px 11px;font-size:12px;background:#111d;color:white;border:1px solid #ffffff66}#introToggle.visible{display:block}
+h1{font-size:18px;margin:0 0 5px}p{font-size:12px;margin:4px 0;line-height:1.45}
+#adjust{position:fixed;z-index:4;left:8px;right:8px;bottom:104px;padding:8px;display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;background:#0009;border-radius:14px}
+#controls{position:fixed;z-index:4;left:0;right:0;bottom:0;padding:12px 10px calc(12px + env(safe-area-inset-bottom));display:flex;gap:7px;justify-content:center;align-items:center;flex-wrap:wrap;background:linear-gradient(transparent,#000c 20%)}
+button{border:0;border-radius:999px;padding:10px 13px;font-size:14px;font-weight:650;background:#f4f4f4;color:#101010;touch-action:manipulation}button.primary{background:#2f80ed;color:white;font-size:16px;padding:13px 18px}button:disabled{opacity:.45}
+#adjust button{padding:9px 12px;min-width:48px}#adjust .hint{color:white;font-size:12px;width:100%;text-align:center}
+#status{position:fixed;z-index:5;left:50%;top:92px;transform:translateX(-50%);max-width:90%;padding:9px 12px;border-radius:10px;background:#111d;color:white;text-align:center;font-size:13px}
+#saved{display:none;position:fixed;z-index:7;top:48px;left:10px;right:10px;max-width:560px;margin:0 auto;padding:12px 12px 10px;border:1px solid #ffffff55;border-radius:12px;background:#101820f2;color:white;text-align:left;font-size:13px;line-height:1.45;box-shadow:0 4px 18px #0008}
+#saved.visible{display:block}#savedClose{display:block;margin:8px 0 0 auto;padding:6px 12px;font-size:12px}
+#share{display:none}
+@media (orientation:landscape) and (max-height:600px), body.landscape{
+ #top{padding:6px 10px 12px;max-width:70%}
+ h1{font-size:15px}p{font-size:11px}
+ #adjust{left:auto;right:6px;top:8px;bottom:68px;width:min(34vw,260px);padding:5px;gap:4px}
+ #adjust button{padding:6px 8px;min-width:40px;font-size:12px}
+ #adjust .hint{font-size:10px}
+ #controls{padding:6px 8px calc(6px + env(safe-area-inset-bottom));gap:5px}
+ #controls button{padding:8px 10px;font-size:12px}
+ #controls button.primary{font-size:14px;padding:9px 13px}
+ #status{top:58px;font-size:12px}
+ #saved{top:40px;font-size:12px;max-width:70vw}
+}
+</style></head><body>
+<video id="video" autoplay playsinline muted></video><div id="gl"></div>
+<div id="top"><h1>いぶきGW ARカメラ</h1><p>カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。</p></div>
+<button id="introToggle" type="button">説明を隠す</button><div id="status">「カメラ開始」を押してください</div><div id="saved"><span id="savedText"></span><button id="savedClose" type="button">閉じる</button></div>
+<div id="adjust">
+ <span class="hint">指1本で移動・2本指で拡大縮小。ボタンで向きも調整できます。</span>
+ <button id="smaller" aria-label="小さく">− 小さく</button>
+ <button id="bigger" aria-label="大きく">＋ 大きく</button>
+ <button id="turnLeft" aria-label="左に回転">↶ 左回転</button>
+ <button id="turnRight" aria-label="右に回転">↷ 右回転</button>
+ <button id="tiltUp" aria-label="上向き">↑ 傾き</button>
+ <button id="tiltDown" aria-label="下向き">↓ 傾き</button>
+</div>
+<div id="controls"><button id="start">カメラ開始</button><button id="animToggle">アンテナ一時停止</button><button id="reset">初期位置</button><button class="primary" id="capture" disabled>● 撮影・保存</button><button id="share" disabled>共有メニューを開く</button></div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
+
+// URLで冒頭の説明だけを切り替える: ?lang=en / ?lang=kids
+const queryLang=new URLSearchParams(location.search).get('lang');
+const fileLang=(location.pathname.endsWith('index_en.html')||location.pathname.includes('/en/'))?'en':(location.pathname.endsWith('index_kids.html')||location.pathname.includes('/kids/'))?'kids':null;
+const lang=queryLang||fileLang;
+const introCopy={
+ ja:{title:'いぶきGW ARカメラ',intro:'カメラ映像に3Dモデルを重ねます。指1本で移動、2本指で拡大・縮小できます。'},
+ en:{title:'IBUKI GW AR Camera',intro:'Overlay the 3D satellite model on your camera view. Drag with one finger and pinch with two fingers to resize.'},
+ kids:{title:'いぶきGW うちゅうカメラ',intro:'カメラに人工衛星を重ねてみよう！ 指1本で動かして、2本の指で大きさを変えられるよ。'}
+};
+const intro=introCopy[lang==='en'?'en':lang==='kids'?'kids':'ja'];
+document.querySelector('#top h1').textContent=intro.title;
+const introPs=document.querySelectorAll('#top p');
+introPs[0].textContent=intro.intro;
+
+// 説明文はカメラ開始後に自動で折りたたみ、必要なときだけ再表示。
+const topPanel=document.querySelector('#top'),introToggle=document.querySelector('#introToggle');
+function setIntroCollapsed(collapsed){
+ topPanel.classList.toggle('collapsed',collapsed);
+ introToggle.textContent=collapsed?'説明を表示':'説明を隠す';
+}
+introToggle.addEventListener('click',()=>setIntroCollapsed(!topPanel.classList.contains('collapsed')));
+function updateOrientationLayout(){
+ // Android Chrome sometimes keeps screen.orientation.type stale during rotation.
+ // Prefer the actual available viewport dimensions, and also listen to orientation APIs.
+ const orientationType=screen.orientation&&screen.orientation.type;
+ const viewportLandscape=innerWidth>innerHeight;
+ const apiLandscape=!!(orientationType&&orientationType.startsWith('landscape'));
+ const isLandscape=viewportLandscape||apiLandscape;
+ document.body.classList.toggle('landscape',!!isLandscape);
+ resizeView();
+}
+const video=document.querySelector('#video'),host=document.querySelector('#gl'),status=document.querySelector('#status');
+const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));renderer.setSize(innerWidth,innerHeight);renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;host.appendChild(renderer.domElement);
+function resizeView(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
+
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);camera.position.set(0,0,7);
+scene.add(new THREE.AmbientLight(0xffffff,2.1));const light=new THREE.DirectionalLight(0xffffff,2.3);light.position.set(3,4,6);scene.add(light);
+const sat=new THREE.Group();scene.add(sat);let modelLoaded=false;
+let mixer=null, antennaAction=null, animationPlaying=true;
+const clock=new THREE.Clock();
+const animButton=document.querySelector('#animToggle');
+
+new GLTFLoader().load('./ggw.glb',gltf=>{
+ const model=gltf.scene;
+ // GLBの元座標で外接箱を計算し、縮小後の中心が原点に来るよう補正
+ model.updateMatrixWorld(true);
+ const bounds=new THREE.Box3().setFromObject(model);
+ const center=bounds.getCenter(new THREE.Vector3());
+ const size=bounds.getSize(new THREE.Vector3());
+ const maxDim=Math.max(size.x,size.y,size.z)||1;
+ const fitScale=3.4/maxDim;
+ model.scale.setScalar(fitScale);
+ model.position.set(-center.x*fitScale,-center.y*fitScale,-center.z*fitScale);
+ model.updateMatrixWorld(true);
+ // スマートフォンでも裏面や暗い材質で消えにくいよう調整
+ model.traverse(obj=>{
+   if(obj.isMesh){
+     obj.frustumCulled=false;
+     const materials=Array.isArray(obj.material)?obj.material:[obj.material];
+     materials.forEach(mat=>{if(mat){mat.side=THREE.DoubleSide;mat.needsUpdate=true;}});
+   }
+ });
+ sat.add(model);sat.position.set(0,0,0);sat.scale.setScalar(1);
+ // GLBのアニメーションはAMSR3アンテナのノードだけを対象にしている
+ if(gltf.animations && gltf.animations.length){
+   mixer=new THREE.AnimationMixer(model);
+   const antennaClip=gltf.animations.find(clip=>clip.name.includes('AMSR') || clip.name.includes('antenna')) || gltf.animations[0];
+   antennaAction=mixer.clipAction(antennaClip);
+   antennaAction.play(); // 初期状態は回転開始
+ }
+ modelLoaded=true;
+ status.style.display='block';
+ status.textContent='3Dモデルを読み込みました。';
+},undefined,error=>{
+ console.error(error);status.style.display='block';
+ status.textContent='3Dモデルを読み込めませんでした。';
+});
+sat.rotation.set(-.24,3.72,.04);let scale=1,pointers=new Map(),pinchDist=0,pinchScale=1,dragX=0,dragY=0;const canvas=renderer.domElement;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){dragX=e.clientX;dragY=e.clientY}if(pointers.size===2){const a=[...pointers.values()];pinchDist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchScale=scale}});
+canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+if(pointers.size===1){sat.position.x+=(e.clientX-dragX)/innerWidth*3.3;sat.position.y-=(e.clientY-dragY)/innerHeight*3.3;dragX=e.clientX;dragY=e.clientY}
+if(pointers.size===2){const a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchDist>0){scale=Math.max(.35,Math.min(3.2,pinchScale*d/pinchDist));sat.scale.setScalar(scale)}}});
+function endPointer(e){pointers.delete(e.pointerId);if(pointers.size===1){const p=[...pointers.values()][0];dragX=p.x;dragY=p.y}}
+canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);
+document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.24,3.72,.04);scale=1;sat.scale.setScalar(1);status.style.display='block';status.textContent=modelLoaded?'表示位置を中央に戻しました。':'3Dモデルを読み込み中です。';setTimeout(()=>{if(modelLoaded)status.style.display='none'},2200)};
+// Buttons provide accessible position/size/orientation controls in addition to touch gestures.
+animButton.onclick=()=>{
+ if(!antennaAction)return;
+ animationPlaying=!animationPlaying;
+ if(animationPlaying){antennaAction.paused=false;antennaAction.play();animButton.textContent='アンテナ一時停止'}
+ else{antennaAction.paused=true;animButton.textContent='アンテナ再生'}
+};
+document.querySelector('#smaller').onclick=()=>{scale=Math.max(.35,scale/1.15);sat.scale.setScalar(scale)};
+document.querySelector('#bigger').onclick=()=>{scale=Math.min(3.2,scale*1.15);sat.scale.setScalar(scale)};
+document.querySelector('#turnLeft').onclick=()=>{sat.rotation.y-=Math.PI/12};
+document.querySelector('#turnRight').onclick=()=>{sat.rotation.y+=Math.PI/12};
+document.querySelector('#tiltUp').onclick=()=>{sat.rotation.x-=Math.PI/18};
+document.querySelector('#tiltDown').onclick=()=>{sat.rotation.x+=Math.PI/18};
+document.querySelector('#start').onclick=async()=>{try{if(!navigator.mediaDevices?.getUserMedia)throw Error('no camera');const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});video.srcObject=stream;await video.play();document.querySelector('#capture').disabled=false;setIntroCollapsed(true);introToggle.classList.add('visible');updateOrientationLayout();status.textContent='カメラ起動中。衛星を調整して撮影してください。';setTimeout(()=>status.style.display='none',3500)}catch(e){status.style.display='block';status.textContent='カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。'}};
+const photo=document.createElement('canvas'),ctx=photo.getContext('2d');
+const shareButton=document.querySelector('#share');
+let latestPhotoBlob=null,latestPhotoName='';
+function drawVideoCover(targetCtx,source,w,h){
+ // Match object-fit:cover while keeping the saved image orientation aligned to the phone.
+ const sw=source.videoWidth,sh=source.videoHeight,srcRatio=sw/sh,dstRatio=w/h;
+ let sx=0,sy=0,sWidth=sw,sHeight=sh;
+ if(srcRatio>dstRatio){sWidth=sh*dstRatio;sx=(sw-sWidth)/2}
+ else if(srcRatio<dstRatio){sHeight=sw/dstRatio;sy=(sh-sHeight)/2}
+ targetCtx.drawImage(source,sx,sy,sWidth,sHeight,0,0,w,h);
+}
+document.querySelector('#capture').onclick=()=>{
+ if(!video.videoWidth){status.style.display='block';status.textContent='カメラ映像の準備ができていません。';return}
+ // Output orientation follows the current viewport; use the camera's native long/short edge resolution.
+ const landscape=innerWidth>=innerHeight;
+ const longEdge=Math.max(video.videoWidth,video.videoHeight),shortEdge=Math.min(video.videoWidth,video.videoHeight);
+ const w=landscape?longEdge:shortEdge,h=landscape?shortEdge:longEdge;
+ const oldPixelRatio=renderer.getPixelRatio(),oldAspect=camera.aspect;
+ renderer.setPixelRatio(1);renderer.setSize(w,h,false);
+ camera.aspect=w/h;camera.updateProjectionMatrix();renderer.render(scene,camera);
+ photo.width=w;photo.height=h;drawVideoCover(ctx,video,w,h);ctx.drawImage(renderer.domElement,0,0,w,h);
+ renderer.setPixelRatio(oldPixelRatio);resizeView();renderer.render(scene,camera);
+ photo.toBlob(blob=>{
+  if(!blob){status.style.display='block';status.textContent='写真を作成できませんでした。';return}
+  latestPhotoBlob=blob;
+  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+  latestPhotoName='いぶきGW-AR-'+stamp+'.png';
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=latestPhotoName;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+  shareButton.style.display='inline-block';shareButton.disabled=false;
+  const saved=document.querySelector('#saved'),savedText=document.querySelector('#savedText');
+  savedText.textContent=/Android/i.test(navigator.userAgent)
+   ? `写真を撮影し、PNG画像をダウンロードしました（${w}×${h} px）。すぐ開くには、ブラウザの「ダウンロード完了」通知をタップしてください。あとで探す場合は、Googleフォトの「コレクション」→「このデバイス内」→「Download」などを確認してください（機種により表示が異なります）。別のアプリに送るときは「共有メニューを開く」を押します。`
+   : `写真を撮影し、PNG画像をダウンロードしました（${w}×${h} px）。iPhoneでは「ファイル」アプリの「ダウンロード」に入る場合があります。写真アプリに入れるには「共有メニューを開く」を押し、共有先に「画像を保存」があれば選んでください。`;
+  saved.classList.add('visible');
+ },'image/png')
+};
+document.querySelector('#savedClose').onclick=()=>document.querySelector('#saved').classList.remove('visible');
+shareButton.onclick=async()=>{
+ if(!latestPhotoBlob)return;
+ const file=new File([latestPhotoBlob],latestPhotoName||'いぶきGW-AR.png',{type:'image/png'});
+ try{
+  if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
+   await navigator.share({files:[file],title:'いぶきGW AR写真'});
+   status.style.display='block';status.textContent='共有先を選んでください。写真アプリに保存する項目がない場合は、撮影後の案内にあるダウンロード先を確認してください。';setTimeout(()=>status.style.display='none',5000);
+  }else{
+   status.style.display='block';status.textContent='このブラウザは画像共有に対応していません。ダウンロードした画像を写真アプリに保存してください。';
+   setTimeout(()=>status.style.display='none',4500);
+  }
+ }catch(e){
+  if(e.name!=='AbortError'){status.style.display='block';status.textContent='共有できませんでした。ダウンロードした画像をご利用ください。';setTimeout(()=>status.style.display='none',4500)}
+ }
+};
+addEventListener('resize',()=>{
+ setTimeout(updateOrientationLayout,80);
+ setTimeout(updateOrientationLayout,350);
+});
+addEventListener('orientationchange',()=>{
+ setTimeout(updateOrientationLayout,150);
+ setTimeout(updateOrientationLayout,450);
+});
+if(screen.orientation&&screen.orientation.addEventListener)screen.orientation.addEventListener('change',()=>{
+ setTimeout(updateOrientationLayout,100);
+ setTimeout(updateOrientationLayout,400);
+});
+if(window.visualViewport)visualViewport.addEventListener('resize',()=>setTimeout(updateOrientationLayout,100));
+updateOrientationLayout();
+function animate(){requestAnimationFrame(animate);const dt=clock.getDelta();if(mixer)mixer.update(dt);renderer.render(scene,camera)}animate();
+</script><script>
+// Translate all controls and status messages for the English and kids editions.
+(function(){
+ const path=location.pathname;
+ const query=new URLSearchParams(location.search).get('lang');
+ const mode=query || ((path.endsWith('index_en.html')||path.includes('/en/'))?'en':((path.endsWith('index_kids.html')||path.includes('/kids/'))?'kids':'ja'));
+ if(mode==='ja') return;
+ const en={
+  '説明を隠す':'Hide help','説明を表示':'Show help','閉じる':'Close',
+  '「カメラ開始」を押してください':'Tap “Start camera” to begin',
+  '指1本で移動・2本指で拡大縮小。ボタンで向きも調整できます。':'Drag with one finger, pinch with two fingers to resize. Use the buttons to adjust the angle.',
+  '小さく':'− Smaller','大きく':'＋ Bigger','左に回転':'Rotate left','右に回転':'Rotate right','上向き':'Tilt up','下向き':'Tilt down',
+  '− 小さく':'− Smaller','＋ 大きく':'＋ Bigger','↶ 左回転':'↶ Rotate left','↷ 右回転':'↷ Rotate right','↑ 傾き':'↑ Tilt up','↓ 傾き':'↓ Tilt down',
+  'カメラ開始':'Start camera','アンテナ一時停止':'Pause antenna','アンテナ再生':'Play antenna','初期位置':'Reset position','● 撮影・保存':'● Take photo & save','共有メニューを開く':'Share photo',
+  'カメラ起動中。衛星を調整して撮影してください。':'Camera is on. Position the satellite, then take a photo.',
+  '3Dモデルを読み込みました。':'The 3D model is loaded.',
+  '3Dモデルを読み込めませんでした。':'Could not load the 3D model.',
+  '表示位置を中央に戻しました。':'Satellite position reset.','3Dモデルを読み込み中です。':'Loading the 3D model…',
+  'カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。':'Could not start the camera. Open this page over HTTPS and allow camera access.',
+  'カメラ映像の準備ができていません。':'Camera video is not ready yet.','写真を作成できませんでした。':'Could not create the photo.',
+  '共有先を選んでください。写真アプリに保存する項目がない場合は、撮影後の案内にあるダウンロード先を確認してください。':'Choose an app to share to. If there is no option to save to Photos, check the download location shown in the photo instructions.',
+  'このブラウザは画像共有に対応していません。ダウンロードした画像を写真アプリに保存してください。':'This browser cannot share images directly. Save the downloaded image to your Photos app.',
+  '共有できませんでした。ダウンロードした画像をご利用ください。':'Sharing failed. Please use the downloaded image.',
+  '写真を撮影し、PNG画像をダウンロードしました':'Photo captured and PNG downloaded',
+  'すぐ開くには、ブラウザの「ダウンロード完了」通知をタップしてください。あとで探す場合は、Googleフォトの「コレクション」→「このデバイス内」→「Download」などを確認してください（機種により表示が異なります）。別のアプリに送るときは「共有メニューを開く」を押します。':'Tap the browser’s download notification to open it now. Later, look in Google Photos → Collections → On this device → Download (labels vary by phone). To send it to another app, tap Share photo.',
+  'iPhoneでは「ファイル」アプリの「ダウンロード」に入る場合があります。写真アプリに入れるには「共有メニューを開く」を押し、共有先に「画像を保存」があれば選んでください。':'On iPhone, the image may be in Files → Downloads. To add it to Photos, tap Share photo and choose Save Image if available.'
+ };
+ const kids={
+  '説明を隠す':'説明をしまう','説明を表示':'説明をみる','閉じる':'とじる',
+  '「カメラ開始」を押してください':'「カメラ開始」をおしてね',
+  '指1本で移動・2本指で拡大縮小。ボタンで向きも調整できます。':'ゆび1本でうごかそう。ゆび2本で大きさをかえられるよ。ボタンでもむきをかえられるよ。',
+  '小さく':'− ちいさく','大きく':'＋ おおきく','左に回転':'左にまわす','右に回転':'右にまわす','上向き':'上にかたむける','下向き':'下にかたむける',
+  '− 小さく':'− ちいさく','＋ 大きく':'＋ おおきく','↶ 左回転':'↶ 左にまわす','↷ 右回転':'↷ 右にまわす','↑ 傾き':'↑ 上にかたむける','↓ 傾き':'↓ 下にかたむける',
+  'カメラ開始':'カメラ開始','アンテナ一時停止':'アンテナをとめる','アンテナ再生':'アンテナをうごかす','初期位置':'まんなかにもどす','● 撮影・保存':'● しゃしんをとる','共有メニューを開く':'ほかのアプリでひらく',
+  'カメラ起動中。衛星を調整して撮影してください。':'カメラがうごいたよ！ いぶきGWをうごかして、しゃしんをとろう。',
+  '3Dモデルを読み込みました。':'いぶきGWがあらわれたよ！',
+  '3Dモデルを読み込めませんでした。':'いぶきGWをよみこめなかったよ。',
+  '表示位置を中央に戻しました。':'まんなかにもどしたよ。','3Dモデルを読み込み中です。':'いぶきGWをよみこんでいるよ…',
+  'カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。':'カメラがつかえないみたい。おとなの人と設定をたしかめてね。',
+  'カメラ映像の準備ができていません。':'カメラのじゅんび中だよ。','写真を作成できませんでした。':'しゃしんをつくれなかったよ。',
+  '共有先を選んでください。写真アプリに保存する項目がない場合は、撮影後の案内にあるダウンロード先を確認してください。':'しゃしんをおくるアプリをえらんでね。みつからないときは、おとなの人とダウンロードした場所をみてね。',
+  'このブラウザは画像共有に対応していません。ダウンロードした画像を写真アプリに保存してください。':'このブラウザでは共有できないみたい。おとなの人とダウンロードしたしゃしんをひらいてね。',
+  '共有できませんでした。ダウンロードした画像をご利用ください。':'共有できなかったよ。ダウンロードしたしゃしんをつかってね。'
+ };
+ const dict=mode==='en'?en:kids;
+ function translateText(s){
+  if(dict[s]) return dict[s];
+  if(mode==='en'){
+   let m=s.match(/^写真を撮影し、PNG画像をダウンロードしました（(.+) px）。すぐ開くには、ブラウザの「ダウンロード完了」通知をタップしてください。あとで探す場合は、Googleフォトの「コレクション」→「このデバイス内」→「Download」などを確認してください（機種により表示が異なります）。別のアプリに送るときは「共有メニューを開く」を押します。$/);
+   if(m)return `Photo captured and PNG downloaded (${m[1]} px). Tap the browser’s download notification to open it now. Later, look in Google Photos → Collections → On this device → Download (labels vary by phone). Tap Share photo to send it to another app.`;
+   m=s.match(/^写真を撮影し、PNG画像をダウンロードしました（(.+) px）。iPhoneでは「ファイル」アプリの「ダウンロード」に入る場合があります。写真アプリに入れるには「共有メニューを開く」を押し、共有先に「画像を保存」があれば選んでください。$/);
+   if(m)return `Photo captured and PNG downloaded (${m[1]} px). On iPhone, it may be in Files → Downloads. To add it to Photos, tap Share photo and choose Save Image if available.`;
+  }
+  if(mode==='kids' && s.startsWith('写真を撮影し、PNG画像をダウンロードしました')){
+   const m=s.match(/（(.+) px）/);return `しゃしんをとったよ！（${m?m[1]+' px':''}） ダウンロードのおしらせをおしてひらいてね。みつからないときは、おとなの人とさがしてね。`;
+  }
+  return s;
+ }
+ function walk(root){
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n;
+  while(n=walker.nextNode()){const old=n.nodeValue.trim();if(!old)continue;const val=translateText(old);if(val!==old)n.nodeValue=n.nodeValue.replace(old,val)}
+ }
+ function apply(){walk(document.body);document.title=mode==='en'?'IBUKI GW AR Camera':'いぶきGW うちゅうカメラ';}
+ addEventListener('DOMContentLoaded',()=>{apply();new MutationObserver(()=>apply()).observe(document.body,{subtree:true,childList:true,characterData:true});});
+})();
+</script></body></html>
