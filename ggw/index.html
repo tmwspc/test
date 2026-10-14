@@ -82,24 +82,17 @@ renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWid
 function resizeView(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}
 
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);camera.position.set(0,0,7);
-// Environment reflections improve metallic materials, but must never prevent
-// camera controls from initializing on mobile browsers. Fall back to lights if
-// RoomEnvironment/PMREM is unavailable or too demanding on the device.
-try {
- const { RoomEnvironment } = await import('https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/environments/RoomEnvironment.js');
- const pmremGenerator = new THREE.PMREMGenerator(renderer);
- try {
-   const environmentTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-   scene.environment = environmentTexture;
- } finally {
-   pmremGenerator.dispose();
- }
-} catch (environmentError) {
- console.warn('Optional environment reflections unavailable; using fallback lighting.', environmentError);
-}
+// Fallback lighting is installed immediately; optional environment reflections load asynchronously.
 scene.add(new THREE.AmbientLight(0xffffff,0.85));
 const light=new THREE.DirectionalLight(0xffffff,2.0);light.position.set(3,4,6);scene.add(light);
 const fillLight=new THREE.DirectionalLight(0xb8d7ff,0.25);fillLight.position.set(-4,-2,3);scene.add(fillLight);
+import('https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/environments/RoomEnvironment.js')
+ .then(({RoomEnvironment})=>{
+   const pmremGenerator=new THREE.PMREMGenerator(renderer);
+   try { scene.environment=pmremGenerator.fromScene(new RoomEnvironment(),0.04).texture; }
+   finally { pmremGenerator.dispose(); }
+ })
+ .catch(e=>console.warn('Optional environment reflections unavailable; using fallback lighting.',e));
 const sat=new THREE.Group();scene.add(sat);let modelLoaded=false;
 let mixer=null, antennaAction=null, animationPlaying=true;
 const clock=new THREE.Clock();
@@ -144,7 +137,7 @@ sat.rotation.set(-.24,3.72,.04);let scale=1,pointers=new Map(),pinchDist=0,pinch
 canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){dragX=e.clientX;dragY=e.clientY}if(pointers.size===2){const a=[...pointers.values()];pinchDist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);pinchScale=scale}});
 canvas.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
 if(pointers.size===1){sat.position.x+=(e.clientX-dragX)/innerWidth*3.3;sat.position.y-=(e.clientY-dragY)/innerHeight*3.3;dragX=e.clientX;dragY=e.clientY}
-if(pointers.size===2){const a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchDist>0){scale=Math.max(.35,Math.min(3.2,pinchScale*d/pinchDist));sat.scale.setScalar(scale)}}});
+if(pointers.size===2){const a=[...pointers.values()],d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);if(pinchDist>0){scale=Math.max(.35,Math.min(30,pinchScale*d/pinchDist));sat.scale.setScalar(scale)}}});
 function endPointer(e){pointers.delete(e.pointerId);if(pointers.size===1){const p=[...pointers.values()][0];dragX=p.x;dragY=p.y}}
 canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);
 document.querySelector('#reset').onclick=()=>{sat.position.set(0,0,0);sat.rotation.set(-.24,3.72,.04);scale=1;sat.scale.setScalar(1);status.style.display='block';status.textContent=modelLoaded?'表示位置を中央に戻しました。':'3Dモデルを読み込み中です。';setTimeout(()=>{if(modelLoaded)status.style.display='none'},2200)};
@@ -156,12 +149,61 @@ animButton.onclick=()=>{
  else{antennaAction.paused=true;animButton.textContent='アンテナ再生'}
 };
 document.querySelector('#smaller').onclick=()=>{scale=Math.max(.35,scale/1.15);sat.scale.setScalar(scale)};
-document.querySelector('#bigger').onclick=()=>{scale=Math.min(3.2,scale*1.15);sat.scale.setScalar(scale)};
+document.querySelector('#bigger').onclick=()=>{scale=Math.min(30,scale*1.15);sat.scale.setScalar(scale)};
 document.querySelector('#turnLeft').onclick=()=>{sat.rotation.y-=Math.PI/12};
 document.querySelector('#turnRight').onclick=()=>{sat.rotation.y+=Math.PI/12};
 document.querySelector('#tiltUp').onclick=()=>{sat.rotation.x-=Math.PI/18};
 document.querySelector('#tiltDown').onclick=()=>{sat.rotation.x+=Math.PI/18};
-document.querySelector('#start').onclick=async()=>{try{if(!navigator.mediaDevices?.getUserMedia)throw Error('no camera');const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});video.srcObject=stream;await video.play();document.querySelector('#capture').disabled=false;setIntroCollapsed(true);introToggle.classList.add('visible');updateOrientationLayout();status.textContent='カメラ起動中。衛星を調整して撮影してください。';setTimeout(()=>status.style.display='none',3500)}catch(e){status.style.display='block';status.textContent='カメラを起動できません。HTTPS接続とブラウザのカメラ許可を確認してください。'}};
+let cameraStarting=false,activeCameraStream=null;
+async function startCameraFromButton(){
+ if(cameraStarting)return;
+ cameraStarting=true;
+ const startButton=document.querySelector('#start');
+ startButton.disabled=true;
+ status.style.display='block';
+ status.textContent='カメラを準備しています…';
+ try{
+  if(!navigator.mediaDevices?.getUserMedia)throw Error('no camera');
+  if(activeCameraStream && activeCameraStream.getVideoTracks().some(t=>t.readyState==='live')){
+   video.srcObject=activeCameraStream;
+  }else{
+   activeCameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+   video.srcObject=activeCameraStream;
+  }
+  if(!video.videoWidth){
+   await new Promise((resolve,reject)=>{
+    let done=false;
+    const finish=(err)=>{if(done)return;done=true;clearTimeout(timer);video.removeEventListener('loadedmetadata',onReady);video.removeEventListener('canplay',onReady);err?reject(err):resolve()};
+    const onReady=()=>{if(video.videoWidth>0)finish()};
+    const timer=setTimeout(()=>finish(new Error('camera metadata timeout')),8000);
+    video.addEventListener('loadedmetadata',onReady);
+    video.addEventListener('canplay',onReady);
+    if(video.videoWidth>0)finish();
+   });
+  }
+  await video.play();
+  if(!video.videoWidth)throw Error('camera video not ready');
+  document.querySelector('#capture').disabled=false;
+  const shareButton=document.querySelector('#share');if(shareButton)shareButton.disabled=false;
+  setIntroCollapsed(true);introToggle.classList.add('visible');updateOrientationLayout();
+  status.textContent='カメラ起動中。衛星を調整して撮影してください。';
+  setTimeout(()=>{status.style.display='none'},3500);
+ }catch(e){
+  console.warn('Camera startup failed:',e);
+  status.style.display='block';
+  status.textContent='カメラを起動できません。カメラの許可を確認し、もう一度お試しください。';
+  if(activeCameraStream && !video.videoWidth){activeCameraStream.getTracks().forEach(t=>t.stop());activeCameraStream=null;video.srcObject=null;}
+ }finally{cameraStarting=false;startButton.disabled=false;}
+}
+document.querySelector('#start').addEventListener('click',startCameraFromButton);
+async function resumeCameraIfNeeded(){
+ if(!activeCameraStream || document.visibilityState==='hidden')return;
+ if(activeCameraStream.getVideoTracks().some(t=>t.readyState==='live') && video.srcObject===activeCameraStream && video.paused){
+  try{await video.play()}catch(e){console.warn('Camera resume deferred:',e)}
+ }
+}
+document.addEventListener('visibilitychange',resumeCameraIfNeeded);
+window.addEventListener('pageshow',resumeCameraIfNeeded);
 const photo=document.createElement('canvas'),ctx=photo.getContext('2d');
 const shareButton=document.querySelector('#share');
 let latestPhotoBlob=null,latestPhotoName='';
